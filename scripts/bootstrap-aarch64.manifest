@@ -1,0 +1,16 @@
+# PrimeTech validated ARM64 bootstrap - acquisition manifest
+#
+# This file is the single source of truth for acquiring the validated TerminalP
+# bootstrap archive. scripts/fetch-bootstrap.sh reads it, verifies SHA-256, and
+# only then places the archive at the Gradle build-input path.
+#
+# The archive is intentionally NOT in Git history (*.zip is gitignored).
+# app/build.gradle pins the same SHA-256 independently and remains the final
+# gate during the build; fetch-bootstrap.sh fails if the two ever disagree.
+
+SOURCE_REPOSITORY=xbustcodex/TerminalP
+RELEASE_TAG=bootstrap-aarch64-2026.02.12-r1
+ASSET_NAME=bootstrap-aarch64.zip
+EXPECTED_SHA256=97d5bbb3e2db080e076e52966294197624ab7c4bf0ce0437f909a5ee57da83ba
+EXPECTED_SIZE=167495746
+DESTINATION=app/src/main/cpp/bootstrap-aarch64.zip
