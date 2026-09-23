@@ -15,7 +15,9 @@ ext {
 android {
     namespace "com.termux"
 
-    compileSdkVersion project.properties.compileSdkVersion.toInteger()
+    // PrimeTech Terminal is a standalone fork and must not conflict with official Termux.
+
+    compileSdk project.properties.compileSdkVersion.toInteger()
     ndkVersion = System.getenv("JITPACK_NDK_VERSION") ?: project.properties.ndkVersion
     def appVersionName = System.getenv("TERMUX_APP_VERSION_NAME") ?: ""
     def apkVersionTag = System.getenv("TERMUX_APK_VERSION_TAG") ?: ""
@@ -41,18 +43,19 @@ android {
     }
 
     defaultConfig {
+        applicationId "com.primetech.terminal"
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
-        versionCode 118
-        versionName "0.118.0"
+        versionCode 1
+        versionName "0.1.0"
 
         if (appVersionName) versionName = appVersionName
         validateVersionName(versionName)
 
         buildConfigField "String", "TERMUX_PACKAGE_VARIANT", "\"" + project.ext.packageVariant + "\"" // Used by TermuxApplication class
 
-        manifestPlaceholders.TERMUX_PACKAGE_NAME = "com.termux"
-        manifestPlaceholders.TERMUX_APP_NAME = "Termux"
+        manifestPlaceholders.TERMUX_PACKAGE_NAME = "com.primetech.terminal"
+        manifestPlaceholders.TERMUX_APP_NAME = "PrimeTech Terminal"
         manifestPlaceholders.TERMUX_API_APP_NAME = "Termux:API"
         manifestPlaceholders.TERMUX_BOOT_APP_NAME = "Termux:Boot"
         manifestPlaceholders.TERMUX_FLOAT_APP_NAME = "Termux:Float"
@@ -132,16 +135,17 @@ android {
         variant.outputs.all { output ->
             if (variant.buildType.name == "debug") {
                 def abi = output.getFilter(com.android.build.OutputFile.ABI)
-                outputFileName = new File("termux-app_" + (apkVersionTag ? apkVersionTag : project.ext.packageVariant + "-" + "debug") + "_" + (abi ? abi : "universal") + ".apk")
+                outputFileName = new File("TerminalP-debug-" + (abi ? abi : "universal") + ".apk")
             } else if (variant.buildType.name == "release") {
                 def abi = output.getFilter(com.android.build.OutputFile.ABI)
-                outputFileName = new File("termux-app_" + (apkVersionTag ? apkVersionTag : project.ext.packageVariant + "-" + "release") + "_" + (abi ? abi : "universal") + ".apk")
+                outputFileName = new File("TerminalP-release-" + (abi ? abi : "universal") + ".apk")
             }
         }
     }
 
     buildFeatures {
         buildConfig true
+        aidl true
     }
 }
 
@@ -170,6 +174,8 @@ def downloadBootstrap(String arch, String expectedChecksum, String version) {
     def localUrl = "src/main/cpp/bootstrap-" + arch + ".zip"
     def file = new File(projectDir, localUrl)
     if (file.exists()) {
+        // PrimeTech bootstrap archives are local source artifacts. Never replace a
+        // verified local archive with the upstream Termux download.
         def buffer = new byte[8192]
         def input = new FileInputStream(file)
         while (true) {
@@ -181,10 +187,16 @@ def downloadBootstrap(String arch, String expectedChecksum, String version) {
         while (checksum.length() < 64) { checksum = "0" + checksum }
         if (checksum == expectedChecksum) {
             return
+        } else if (project.ext.primeTechBootstrap && arch == "aarch64") {
+            throw new GradleException("PrimeTech bootstrap has wrong checksum: " + localUrl + ": expected: " + expectedChecksum + ", actual: " + checksum)
         } else {
             logger.quiet("Deleting old local file with wrong hash: " + localUrl + ": expected: " + expectedChecksum + ", actual: " + checksum)
             file.delete()
         }
+    }
+
+    if (project.ext.primeTechBootstrap && arch == "aarch64") {
+        throw new GradleException("Missing PrimeTech bootstrap archive: " + localUrl)
     }
 
     def remoteUrl = "https://github.com/termux/termux-packages/releases/download/bootstrap-" + version + "/bootstrap-" + arch + ".zip"
@@ -207,6 +219,8 @@ def downloadBootstrap(String arch, String expectedChecksum, String version) {
     }
 }
 
+ext.primeTechBootstrap = true
+
 clean {
     doLast {
         def tree = fileTree(new File(projectDir, 'src/main/cpp'))
@@ -218,14 +232,19 @@ clean {
 task downloadBootstraps() {
     doLast {
         def packageVariant = project.ext.packageVariant
+        // Only ARM64 has a source-built PrimeTech archive at this stage.
+        project.ext.primeTechBootstrap = true
         if (packageVariant == "apt-android-7") {
             def version = "2026.02.12-r1" + "%2B" + "apt.android-7"
-            downloadBootstrap("aarch64", "ea2aeba8819e517db711f8c32369e89e7c52cee73e07930ff91185e1ab93f4f3", version)
+            downloadBootstrap("aarch64", "97d5bbb3e2db080e076e52966294197624ab7c4bf0ce0437f909a5ee57da83ba", version)
+            // Other ABIs remain upstream until independently rebuilt.
+            project.ext.primeTechBootstrap = false
             downloadBootstrap("arm", "a38f4d3b2f735f83be2bf54eff463e86dc32a3e2f9f861c1557c4378d249c018", version)
             downloadBootstrap("i686", "f5bc0b025b9f3b420b5fcaeefc064f888f5f22a0d6fd7090f4aac0c33eb3555b", version)
             downloadBootstrap("x86_64", "b7fd0f2e3a4de534be3144f9f91acc768630fc463eaf134ab2e64c545e834f7a", version)
         } else if (packageVariant == "apt-android-5") {
             def version = "2022.04.28-r6" + "+" + packageVariant
+            project.ext.primeTechBootstrap = false
             downloadBootstrap("aarch64", "913609d439415c828c5640be1b0561467e539cb1c7080662decaaca2fb4820e7", version)
             downloadBootstrap("arm", "26bfb45304c946170db69108e5eb6e3641aad751406ce106c80df80cad2eccf8", version)
             downloadBootstrap("i686", "46dcfeb5eef67ba765498db9fe4c50dc4690805139aa0dd141a9d8ee0693cd27", version)
@@ -239,5 +258,42 @@ task downloadBootstraps() {
 afterEvaluate {
     android.applicationVariants.all { variant ->
         variant.javaCompileProvider.get().dependsOn(downloadBootstraps)
+
+        def variantName = variant.name
+        def capitalized = variantName.capitalize()
+        def buildType = variant.buildType.name
+
+        // Copy the NDK-built arm64 probe ELF into the generated assets dir. Wired in
+        // afterEvaluate so the merge task name is resolvable.
+        def copyProbeIntoAssets = tasks.register("copyProbeIntoAssets$capitalized") {
+            dependsOn tasks.named("externalNativeBuild$capitalized")
+            def outDir = file("$buildDir/generated/primetech/primetech/probe")
+            outputs.dir(outDir)
+            doLast {
+                def src = file("$buildDir/intermediates/ndkBuild/$buildType/obj/local/arm64-v8a/primetech_elf_probe")
+                outDir.mkdirs()
+                copy {
+                    from src
+                    into outDir
+                    rename { 'primetech-native-elf-probe' }
+                }
+            }
+        }
+        tasks.named("merge${capitalized}Assets").configure { it.dependsOn(copyProbeIntoAssets) }
     }
 }
+
+// TerminalP-owned native probe: after the NDK builds the standalone arm64 ELF, place it in the
+// app assets so it ships in the APK and can be installed to $PREFIX/libexec by LibexecProbe at
+// service init. AGP only packages .so files from the ndkBuild output into lib/, so the probe is
+// shipped as an asset instead.
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        // Register the generated probe asset dir as an extra assets source. The files are
+        // produced by the copy task wired in afterEvaluate (task names are only resolvable
+        // after project evaluation in this AGP version).
+        def variantName = variant.name
+        android.sourceSets.getByName(variantName).assets.srcDir(file("$buildDir/generated/primetech"))
+    }
+}
+

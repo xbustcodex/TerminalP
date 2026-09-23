@@ -206,6 +206,14 @@
             </intent-filter>
         </service>
 
+        <!-- Bound privileged-execution bridge for the signed PrimeTech Terminal app.
+             Exported to allow cross-app bound binding; caller attestation (package + signing
+             certificate SHA-256 digest) is enforced server-side in PrivilegedExecutionService.
+             This is intentionally NOT the unrestricted RunCommandService/RUN_COMMAND path. -->
+        <service
+            android:name=".app.privilege.PrivilegedExecutionService"
+            android:exported="true" />
+
 
         <!-- This (or rather, value 2.1 or higher) is needed to make the Samsung Galaxy S8 mark the
         app with "This app is optimized to run in full screen." -->
