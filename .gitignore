@@ -37,3 +37,13 @@ local.properties
 .swp
 ehthumbs.db
 Thumbs.db
+
+# PrimeTech: generated APK-extraction audit artifacts.
+# These are unpacked copies of build output, not source.
+apk-check/
+apk-audit/
+.audit-apk/
+
+# PrimeTech: local build/test logs and scratch archives.
+.buildlogs/
+*.log
